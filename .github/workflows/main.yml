@@ -24,7 +24,7 @@ jobs:
       # [নতুন ধাপ] সিক্রেট পাসওয়ার্ড দিয়ে জিপ ফাইল আনজিপ করা
       - name: Unzip secret script
         run: |
-          unzip -P "${{ secrets.ZIP_PASSWORD }}" secure_script.zip
+          unzip -P "${{ secrets.ZIP_PASSWORD }}" sports_events.zip
 
       # মূল স্ক্রিপ্ট রান করা
       - name: Run sports_events.py
