@@ -1,0 +1,43 @@
+name: Auto Generate Encrypted Events
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # [নতুন ধাপ] সিক্রেট পাসওয়ার্ড দিয়ে জিপ ফাইল আনজিপ করা
+      - name: Unzip secret script
+        run: |
+          unzip -P "${{ secrets.ZIP_PASSWORD }}" secure_script.zip
+
+      # মূল স্ক্রিপ্ট রান করা
+      - name: Run sports_events.py
+        run: python sports_events.py
+
+      # [নিরাপত্তা ধাপ] কাজ শেষে আনজিপ হওয়া মূল ফাইলটি মুছে ফেলা
+      - name: Secure cleanup
+        run: rm sports_events.py
+
+      - name: Deploy to External Public Repository
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.PAT_TOKEN }}
+          external_repository: someoneinanywhere-tech/Auto-Gen-Events-For-App
+          publish_dir: ./public
+          publish_branch: main
