@@ -29,7 +29,7 @@ last_update_error = ""
 def add_cors_and_debug_headers(resp):
     # এপের WebView (tvdekhun.pages.dev অরিজিন) যেন fetch করতে পারে
     resp.headers['Access-Control-Allow-Origin'] = '*'
-    resp.headers['Access-Control-Expose-Headers'] = 'X-Data-Updated, X-Update-Error, Age, CF-Cache-Status'
+    resp.headers['Access-Control-Expose-Headers'] = 'X-Data-Updated, X-Update-Error, Age, CF-Cache-Status, Date'
     if cache_updated_ms:
         resp.headers['X-Data-Updated'] = str(cache_updated_ms)
     if last_update_error:
