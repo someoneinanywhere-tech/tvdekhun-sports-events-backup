@@ -7,7 +7,7 @@ try:
 except ImportError:
     print("Flask is not installed. Please install it using: pip install Flask")
 
-# আপনার মূল ফাইল থেকে ফাংশনগুলো ইমপোর্ট করা হচ্ছে
+# মূল ফাইল থেকে ফাংশনগুলো ইমপোর্ট করা হচ্ছে
 from sports_events import (
     fetch_all_global_events,
     encrypt_rc4,
@@ -27,7 +27,6 @@ last_update_error = ""
 
 @app.after_request
 def add_cors_and_debug_headers(resp):
-    # এপের WebView (tvdekhun.pages.dev অরিজিন) যেন fetch করতে পারে
     resp.headers['Access-Control-Allow-Origin'] = '*'
     resp.headers['Access-Control-Expose-Headers'] = 'X-Data-Updated, X-Update-Error, Age, CF-Cache-Status, Date'
     if cache_updated_ms:
@@ -37,7 +36,7 @@ def add_cors_and_debug_headers(resp):
     return resp
 
 def perform_update():
-    """এই ফাংশনটি ব্যাকগ্রাউন্ডে বা রিকোয়েস্ট পেলে ডেটা আপডেট করবে"""
+    """রিকোয়েস্ট পেলে ডেটা আপডেট করবে"""
     global cache_enc, cache_non_enc, cache_m3u, cache_updated_ms, last_update_error
     print("Starting background update for Render...")
     
@@ -45,9 +44,9 @@ def perform_update():
         # sports_events থেকে মেইন ফাংশন কল করা হচ্ছে
         events = fetch_all_global_events()
         
-        # ==========================================
-        # [নতুন ফিচার] এডমিন স্ট্যাটিসটিক্স ও লগ তৈরি
-        # ==========================================
+        # ============================
+        # এডমিন স্ট্যাটিসটিক্স ও লগ তৈরি
+        # ============================
         total_matches = len(events)
         live_matches = sum(1 for ev in events if ev.get("isLive", False))
         
@@ -90,10 +89,10 @@ def perform_update():
         }
         # ==========================================
         
-        # ১. নন-এনক্রিপ্টেড জেসন রেডি করা (স্ট্যাটিস্টিক্স সহ)
+        # ১. নন-এনক্রিপ্টেড জেসন তৈরি করা (স্ট্যাটিস্টিক্স সহ)
         cache_non_enc = json.dumps(admin_data, indent=2, ensure_ascii=False)
         
-        # ২. এনক্রিপ্টেড জেসন রেডি করা
+        # ২. এনক্রিপ্টেড জেসন  তৈরি করা 
         if HIDE_UNUSED_FIELDS_IN_ENCRYPTED_JSON:
             app_events = remove_unused_fields(events)
         else:
@@ -102,7 +101,7 @@ def perform_update():
         json_data_enc = json.dumps(app_events, ensure_ascii=False)
         cache_enc = encrypt_rc4(json_data_enc)
         
-        # ৩. M3U প্লেলিস্ট রেডি করা
+        # ৩. M3U প্লেলিস্ট তৈরি করা 
         total_m3u_streams = sum(len(ev.get("streams") or []) for ev in events)
         bd_time_str = datetime.now(GMT_PLUS_6).strftime("%Y-%m-%d %I:%M:%S %p")
         m3u_lines = [
@@ -136,23 +135,23 @@ def perform_update():
                 m3u_lines.append(url)
                 
         cache_m3u = "\n".join(m3u_lines)
-        print("✅ Data successfully updated in Render memory.")
+        print("Data successfully updated in Render memory.")
         cache_updated_ms = int(time.time() * 1000)
         last_update_error = ""
         
     except Exception as e:
-        print(f"❌ Update failed: {e}")
+        print(f"Update failed: {e}")
         last_update_error = str(e)
 
 # --- API Routes ---
 
 @app.route('/')
 def home():
-    return "TVDekhun API is Live! 🚀"
+    return "TVDekhun Sports API is Live!"
 
 @app.route('/update')
 def trigger_update():
-    """Cron-job.org এই লিংকে প্রতি ৫ মিনিটে হিট করে ডেটা আপডেট করবে"""
+    """Cron-job.org এই লিংকে প্রতি ৫ মিনিটে হিট করে স্পোর্টস ডাটা আপডেট করবে"""
     perform_update()
     resp = Response("Update Process Completed", mimetype='text/plain')
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
