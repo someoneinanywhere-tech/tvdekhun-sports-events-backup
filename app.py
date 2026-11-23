@@ -1,9 +1,9 @@
 import os
 import json
 import time
-from datetime import datetime
+import hmac
 try:
-    from flask import Flask, Response
+    from flask import Flask, Response, request
 except ImportError:
     print("Flask is not installed. Please install it using: pip install Flask")
 
@@ -12,16 +12,41 @@ from sports_events import (
     fetch_all_global_events,
     encrypt_rc4,
     remove_unused_fields,
-    HIDE_UNUSED_FIELDS_IN_ENCRYPTED_JSON,
-    GMT_PLUS_6
+    HIDE_UNUSED_FIELDS_IN_ENCRYPTED_JSON
 )
 
 app = Flask(__name__)
 
-# গ্লোবাল ভ্যারিয়েবল (সার্ভারের মেমোরিতে ডেটা ক্যাশ করে রাখার জন্য)
+# ===============
+# সিকিউরিটি সেটিং
+# ================
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
+UPDATE_KEY = os.environ.get("UPDATE_KEY", "")
+if not ADMIN_KEY:
+    print("[WARN] ADMIN_KEY সেট করা নেই")
+
+DECOY_TEXT = (
+    "Sports Data Source Mapping\n"
+    "--------------------------------\n"
+    "Provides structural mapping and network endpoint synchronization for player components."
+)
+
+def _key_matches(given: str, expected: str) -> bool:
+    if not expected:
+        return False
+    return hmac.compare_digest((given or "").encode("utf-8"), expected.encode("utf-8"))
+
+def is_admin_request() -> bool:
+    return _key_matches(request.args.get("admin", ""), ADMIN_KEY)
+
+def decoy_response():
+    resp = Response(DECOY_TEXT, mimetype='text/plain')
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+# গ্লোবাল ভ্যারিয়েবল (সার্ভারের মেমোরিতে ডেটা ক্যাশ করে রাখার জন্য)
 cache_enc = ""
 cache_non_enc = ""
-cache_m3u = ""
 cache_updated_ms = 0
 last_update_error = ""
 
@@ -31,13 +56,13 @@ def add_cors_and_debug_headers(resp):
     resp.headers['Access-Control-Expose-Headers'] = 'X-Data-Updated, X-Update-Error, Age, CF-Cache-Status, Date'
     if cache_updated_ms:
         resp.headers['X-Data-Updated'] = str(cache_updated_ms)
-    if last_update_error:
+    if last_update_error and is_admin_request():
         resp.headers['X-Update-Error'] = last_update_error[:80].encode('ascii', 'ignore').decode().replace('\n', ' ')
     return resp
 
 def perform_update():
     """রিকোয়েস্ট পেলে ডেটা আপডেট করবে"""
-    global cache_enc, cache_non_enc, cache_m3u, cache_updated_ms, last_update_error
+    global cache_enc, cache_non_enc, cache_updated_ms, last_update_error
     print("Starting background update for Render...")
     
     try:
@@ -100,41 +125,7 @@ def perform_update():
             
         json_data_enc = json.dumps(app_events, ensure_ascii=False)
         cache_enc = encrypt_rc4(json_data_enc)
-        
-        # ৩. M3U প্লেলিস্ট তৈরি করা 
-        total_m3u_streams = sum(len(ev.get("streams") or []) for ev in events)
-        bd_time_str = datetime.now(GMT_PLUS_6).strftime("%Y-%m-%d %I:%M:%S %p")
-        m3u_lines = [
-            "#EXTM3U",
-            "#=================================",
-            "#  Developed by: TvDekhun.com",
-            "#  Telegram: https://t.me/TvDekhun",
-            f"#  Last Updated: {bd_time_str} (BD Time)",
-            f"#  Live Channels Count: {total_m3u_streams}",
-            "#================================="
-        ]
-        for ev in events:
-            title = ev.get("title", "Unknown Event")
-            category = ev.get("category", "Sports")
-            poster = ev.get("poster") or ev.get("leagueLogo") or ""
-            for s in ev.get("streams") or []:
-                server_name = s.get("sourceName", "Unknown Server")
-                url = s.get("streamUrl", "")
-                headers = s.get("headers", {})
-                drm = s.get("drm", {})
-                
-                m3u_lines.append(f'\n#EXTINF:-1 tvg-logo="{poster}" group-title="{category}", {title} - {server_name}')
-                if headers:
-                    if "Referer" in headers:
-                        m3u_lines.append(f'#EXTVLCOPT:http-referrer={headers["Referer"]}')
-                    if "User-Agent" in headers:
-                        m3u_lines.append(f'#EXTVLCOPT:http-user-agent={headers["User-Agent"]}')
-                if drm and "clearkey" in drm:
-                    m3u_lines.append('#KODIPROP:inputstream.adaptive.license_type=clearkey')
-                    m3u_lines.append(f'#KODIPROP:inputstream.adaptive.license_key={drm["clearkey"]}')
-                m3u_lines.append(url)
-                
-        cache_m3u = "\n".join(m3u_lines)
+
         print("Data successfully updated in Render memory.")
         cache_updated_ms = int(time.time() * 1000)
         last_update_error = ""
@@ -152,45 +143,26 @@ def home():
 @app.route('/update')
 def trigger_update():
     """Cron-job.org এই লিংকে প্রতি ৫ মিনিটে হিট করে স্পোর্টস ডাটা আপডেট করবে"""
+    if UPDATE_KEY and not _key_matches(request.args.get("key", ""), UPDATE_KEY):
+        return decoy_response()
     perform_update()
     resp = Response("Update Process Completed", mimetype='text/plain')
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     return resp, 200
 
-# ১. অ্যাডমিনের নন-এনক্রিপ্টেড জেসন
+# অ্যাডমিনের নন-এনক্রিপ্টেড জেসন
 @app.route('/events-for-admin-non-encrypted.json')
 def get_admin_events():
     """অ্যাডমিনের জন্য নন-এনক্রিপ্টেড ডেটা"""
+    if not is_admin_request():
+        return decoy_response()
     if not cache_non_enc:
         perform_update()
     resp = Response(cache_non_enc, mimetype='application/json')
-    resp.headers['Cache-Control'] = 'public, max-age=180'
+    resp.headers['Cache-Control'] = 'private, no-store'
     return resp
 
-# ২. প্লেয়ারের M3U প্লেলিস্ট
-@app.route('/events-for-admin-non-encrypted.m3u')
-def get_m3u_playlist():
-    """প্লেয়ারের জন্য M3U ডেটা"""
-    if not cache_m3u:
-        perform_update()
-    resp = Response(cache_m3u, mimetype='audio/mpegurl')
-    resp.headers['Cache-Control'] = 'public, max-age=180'
-    return resp
-
-# ৩. অ্যাপের এনক্রিপ্টেড জেসন (টাইমস্ট্যাম্প সহ ডায়নামিক রাউট)
-@app.route('/events-<timestamp>.json')
-def get_encrypted_events_with_timestamp(timestamp):
-    """
-    অ্যাপের জন্য এনক্রিপ্টেড ডেটা।
-    লিংকে যেকোনো টাইমস্ট্যাম্প থাকলেও এটি লেটেস্ট ডেটা সার্ভ করবে।
-    """
-    if not cache_enc:
-        perform_update()
-    resp = Response(cache_enc, mimetype='text/plain')
-    resp.headers['Cache-Control'] = 'public, max-age=180'
-    return resp
-
-# ৪. অ্যাপের ফিক্সড লিংক
+# অ্যাপের ফিক্সড এনক্রিপ্টেড জেসন লিংক
 @app.route('/events-latest.json')
 def get_encrypted_events_latest():
     if not cache_enc:
@@ -198,6 +170,11 @@ def get_encrypted_events_latest():
     resp = Response(cache_enc, mimetype='text/plain')
     resp.headers['Cache-Control'] = 'public, max-age=180'
     return resp
+
+# অজানা বা বন্ধ করা যেকোনো লিংকেও একই ডিকয় মেসেজ
+@app.errorhandler(404)
+def not_found_decoy(e):
+    return decoy_response()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
