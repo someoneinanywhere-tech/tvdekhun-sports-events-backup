@@ -89,6 +89,18 @@ def perform_update():
             for s in ev.get("streams", []):
                 if s.get("source_type") == "bbb_json":
                     bbb_injected_links += 1
+
+        mson_injected_links = 0
+        sonym3u_injected_links = 0
+        tvd_events_injected_links = 0
+        for ev in events:
+            for s in ev.get("streams", []):
+                if s.get("source_type") == "monirul_sonyliv":
+                    mson_injected_links += 1
+                elif s.get("source_type") == "sonyliv_m3u":
+                    sonym3u_injected_links += 1
+                elif s.get("source_type") == "tvd_events":
+                    tvd_events_injected_links += 1
         
         merged_details = []
         for ev in events:
@@ -107,6 +119,9 @@ def perform_update():
                 "iptv123_new_matches_added": iptv123_new_matches,
                 "iptv123_links_injected_to_existing": iptv123_injected_links,
                 "bbb_links_injected": bbb_injected_links,
+                "MonirulSonyLiv_links_injected": mson_injected_links,
+                "SonyLivM3U_links_injected": sonym3u_injected_links,
+                "TVDekhunEvents_links_injected": tvd_events_injected_links,
                 "total_merged_matches": len(merged_details),
                 "merge_logs": merged_details
             },
