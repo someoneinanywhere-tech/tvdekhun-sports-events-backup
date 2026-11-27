@@ -121,7 +121,7 @@ def perform_update():
                 "bbb_links_injected": bbb_injected_links,
                 "MonirulSonyLiv_links_injected": mson_injected_links,
                 "SonyLivM3U_links_injected": sonym3u_injected_links,
-                "TVDekhunEvents_links_injected": tvd_events_injected_links,
+                "TVDekhunEvents_doms9_links_injected": tvd_events_injected_links,
                 "total_merged_matches": len(merged_details),
                 "merge_logs": merged_details
             },
